@@ -1,0 +1,7 @@
+{
+  "name": "lezer-import-tree-sitter",
+  "dependencies": {
+    "regexp-parser-literal": "^1.1.14",
+    "regexpp2": "^1.3.9"
+  }
+}
