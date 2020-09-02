@@ -50,10 +50,23 @@ function choices(expr: TSExpr): TSExpr[] {
   return expr.members.reduce((a, b) => a.concat(choices(b)), [] as TSExpr[])
 }
 
+function isPrec(expr: TSExpr): expr is PrecExpr {
+  return expr.type == "PREC" || expr.type == "PREC_RIGHT" || expr.type == "PREC_LEFT" || expr.type == "PREC_DYNAMIC"
+}
+
+function takePrec(expr: TSExpr) {
+  let comment = ""
+  while (isPrec(expr)) {
+    let label = expr.type.slice(5).toLowerCase()
+    comment += (comment ? " " : "") + (label ? label + " " : "") + expr.value
+    expr = expr.content
+  } 
+  return {expr, comment: comment ? `/* precedence: ${comment} */ ` : ""}
+}
+
 class Context {
   rules: {[name: string]: string} = Object.create(null)
   tokens: {[name: string]: string} = Object.create(null)
-  precedences: {value: number, type: "PREC" | "PREC_LEFT" | "PREC_RIGHT"}[] = []
   skip: string = ""
 
   wordRE: RegExp | null = null
@@ -73,11 +86,6 @@ class Context {
     return name
   }
 
-  translateSeq(members: TSExpr[], token: boolean, markers: string[] = []) {
-    let markerStr = !markers.length ? "" : markers.join(" ") + " "
-    return markerStr + members.map(e => this.translateInner(e, token, 2)).join(" " + markerStr)
-  }
-
   translateExpr(expr: TSExpr, token: boolean): string {
     switch (expr.type) {
       case "REPEAT": case "REPEAT1":
@@ -95,7 +103,7 @@ class Context {
         let inner = this.translateExpr(expr.content, token)
         return expr.named ? `${this.translateName(expr.value)} { ${inner} }` : inner
       case "SEQ":
-        return this.translateSeq(expr.members, token)
+        return expr.members.map(e => this.translateInner(e, token, 2)).join(" ")
       case "STRING":
         if (!token && this.wordRE?.test(expr.value)) return `${this.wordRuleName}<${JSON.stringify(expr.value)}>`
         return JSON.stringify(expr.value)
@@ -108,14 +116,9 @@ class Context {
         return this.defineToken(null, expr.content)
       case "BLANK":
         return '""'
-      case "PREC": case "PREC_LEFT": case "PREC_RIGHT": // FIXME?
-        if (token) return this.translateExpr(expr.content, token)
-        let marker = this.definePrec(expr.type, expr.value) + " "
-        if (expr.content.type == "SEQ")
-          return this.translateSeq(expr.content.members, token, [marker])
-        return marker + this.translateInner(expr.content, token, 2)
-      case "PREC_DYNAMIC":
-        return this.translateExpr(expr.content, token)
+      case "PREC": case "PREC_LEFT": case "PREC_RIGHT": case "PREC_DYNAMIC":
+        let {expr: innerExpr, comment} = takePrec(expr)
+        return `${comment}(${this.translateExpr(innerExpr, token)})`
       default:
         throw new RangeError("Unexpected expression type: " + (expr as any).type)
     }
@@ -125,7 +128,7 @@ class Context {
     return (expr.type == "STRING" && !this.wordRE?.test(expr.value)) ||
       expr.type == "PATTERN" || expr.type == "BLANK" ||
       (expr.type == "SEQ" || expr.type == "CHOICE") && expr.members.every(e => this.isTokenish(e)) ||
-      (expr.type == "REPEAT" || expr.type == "REPEAT1") && this.isTokenish(expr.content)
+      (expr.type == "REPEAT" || expr.type == "REPEAT1" || isPrec(expr)) && this.isTokenish(expr.content)
   }
 
   translateRule(name: string, content: TSExpr, top: boolean) {
@@ -134,15 +137,10 @@ class Context {
     } else if (!top && this.isTokenish(content)) {
       this.defineToken(name, content)
     } else {
-      let conflictMarkers = []
-      if (this.def.conflicts) for (let i = 0; i < this.def.conflicts.length; i++)
-        if (this.def.conflicts[i].includes(name)) conflictMarkers.push("~c" + i)
-      let result = []
-      for (let choice of choices(content)) {
-        if (choice.type == "SEQ") result.push(this.translateSeq(choice.members, false, conflictMarkers))
-        else result.push(this.translateExpr(choice, false))
-      }
-      this.rules[(top ? "@top " : "") + this.translateName(name)] = `{\n  ${result.join(" |\n  ")}\n}`
+      let {comment, expr} = takePrec(content)
+      let result = choices(expr).map(choice => this.translateExpr(choice, false))
+      this.rules[(top ? "@top " : "") + this.translateName(name)] =
+        `${comment}{\n  ${result.join(" |\n  ")}\n}`
     }
   }
 
@@ -209,21 +207,12 @@ class Context {
     }
   }
 
-  definePrec(type: "PREC" | "PREC_LEFT" | "PREC_RIGHT", value: number) {
-    if (!this.precedences.some(p => p.value == value && p.type == type)) this.precedences.push({value, type})
-    return "!" + this.precName(value, type)
-  }
-
-  precName(value: number, type: "PREC" | "PREC_LEFT" | "PREC_RIGHT") {
-    return "prec_" + (value < 0 ? "m" + -value : value) + (type == "PREC_LEFT" ? "_l" : type == "PREC_RIGHT" ? "_r" : "")
-  }
-
   defineToken(name: string | null, content: TSExpr) {
-    while (/^PREC/.test(content.type)) content = (content as PrecExpr).content
-    if (name == null && content.type == "STRING")
-      return JSON.stringify(content.value)
+    let {comment, expr} = takePrec(content)
+    if (!comment && name == null && expr.type == "STRING")
+      return JSON.stringify(expr.value)
     let newName = name ? this.translateName(name) : this.generateName("token")
-    this.tokens[newName] = `{\n    ${this.translateExpr(content, true)}\n  }`
+    this.tokens[newName] = `${comment}{\n    ${this.translateExpr(expr, true)}\n  }`
     return newName
   }
 
@@ -262,10 +251,6 @@ class Context {
   }
 
   grammar() {
-    let precStr = this.precedences.length ? `@precedence {\n  ${
-      this.precedences.sort((a, b) => b.value - a.value).map(({value, type}) => {
-        return this.precName(value, type) + (type == "PREC_LEFT" ? " @left" : type == "PREC_RIGHT" ? " @right" : "")
-      }).join("\n  ")}\n}\n\n` : ""
     let rules = Object.keys(this.rules)
     let ruleStr = rules.map(r => `${r} ${this.rules[r]}\n\n`).join("")
     let externalStr = this.def.externals && this.def.externals.length
@@ -274,13 +259,40 @@ class Context {
     let tokens = Object.keys(this.tokens)
     let tokenStr = `@tokens {\n${tokens.map(t => `  ${t} ${this.tokens[t]}\n`).join("")}}`
     let skipStr = `@skip { ${this.skip} }\n\n`
-    return precStr + ruleStr + this.wordRule + skipStr + externalStr + tokenStr
+    return ruleStr + this.wordRule + skipStr + externalStr + tokenStr
   }
 }
 
-export function build(content: string) {
+export function importGrammar(content: string) {
   let def = JSON.parse(content) as TSDefinition
   let cx = new Context(def)
   cx.build()
   return cx.grammar()
 } 
+
+const test = /^\s*==+\n(.*)\n==+\n\s*([^]+?)\n---+\n\s*([^]+?)(?=\n==+|$)/
+
+function translateName(name: string) {
+  if (name[0] != "_") return name[0].toUpperCase() + name.slice(1).replace(/_\w/g, m => m.slice(1).toUpperCase())
+  if (name[1].toUpperCase() != name[1]) return name[1] + name.slice(2).replace(/_\w/g, m => m.slice(1).toUpperCase())
+  return name
+}
+
+export function importTest(file: string, renamed: {[name: string]: string} = {}) {
+  let result: string[] = [], pos = 0
+  while (pos < file.length) {
+    let next = test.exec(file.slice(pos))
+    if (!next) throw new Error("Failing to find test at " + pos)
+    let [, name, code, tree] = next
+    tree = tree
+      .replace(/\w+: */g, "")
+      .replace(/\((\w+)(\)| *)/g, (_, n, p) => n + (p == ")" ? "" : "("))
+      .replace(/(\w|\))(\s+)(\w)/g, (_, before, space, after) => `${before},${space}${after}`)
+      .replace(/\w+/g, w => {
+        return Object.prototype.hasOwnProperty.call(renamed, w) ? renamed[w] : translateName(w)
+      })
+    result.push(`# ${name}\n\n${code}\n==>\n\n${tree}`)
+    pos += next[0].length
+  }
+  return result.join("\n\n")
+}
