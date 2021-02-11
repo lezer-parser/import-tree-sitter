@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "lib": ["es2017"],
+    "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "sourceMap": true,

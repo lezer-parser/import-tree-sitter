@@ -185,7 +185,7 @@ class Context {
               if (r.kind == "digit") return "0-9"
               else if (r.kind == "space") return " \\t\\n\\r"
               else if (r.kind == "word") return "a-zA-Z0-9_"
-              else new Error("Unhandled range type: EscapeCharacterSet/property")
+              else throw new Error("Unhandled range type: EscapeCharacterSet/property")
             case "Character":
               return r.raw
             case "CharacterClassRange":
@@ -199,7 +199,7 @@ class Context {
         else if (elt.kind == "digit") return `${elt.negate ? "!" : "$"}[0-9]`
         else if (elt.kind == "space") return `${elt.negate ? "!" : "$"}[ \\t\\r\\n]`
         else if (elt.kind == "word") return `${elt.negate ? "!" : "$"}[a-zA-Z0-9_]`
-        else new Error("Unhandled range type: EscapeCharacterSet/property")
+        else throw new Error("Unhandled range type: EscapeCharacterSet/property")
       case "Character":
         return JSON.stringify(elt.raw)
       default:
