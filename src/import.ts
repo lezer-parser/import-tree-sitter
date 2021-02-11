@@ -22,7 +22,7 @@ type TSDefinition = {
   rules: {[name: string]: TSExpr},
   extras?: TSExpr[],
   conflicts?: string[][],
-  externals?: SymbolExpr[],
+  externals?: (SymbolExpr | StringExpr)[],
   inline?: string[],
   supertypes?: string[]
 }
@@ -253,9 +253,11 @@ class Context {
   grammar() {
     let rules = Object.keys(this.rules)
     let ruleStr = rules.map(r => `${r} ${this.rules[r]}\n\n`).join("")
-    let externalStr = this.def.externals && this.def.externals.length
-      ? `@external tokens token from "./tokens" { ${this.def.externals.map(s => this.translateName(s.name)).join(", ")} }\n\n`
-      : ""
+    let externalStr = ""
+    if (this.def.externals && this.def.externals.length) {
+      const tmp = this.def.externals.filter((s): s is SymbolExpr => s.type == "SYMBOL").map(s => this.translateName(s.name)).join(", ")
+      externalStr = `@external tokens token from "./tokens" { ${tmp} }\n\n`
+    }
     let tokens = Object.keys(this.tokens)
     let tokenStr = `@tokens {\n${tokens.map(t => `  ${t} ${this.tokens[t]}\n`).join("")}}`
     let skipStr = `@skip { ${this.skip} }\n\n`
