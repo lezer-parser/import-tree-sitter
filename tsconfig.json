@@ -1,14 +1,19 @@
 {
   "compilerOptions": {
-    "lib": ["es2017"],
+    "lib": ["esnext"],
+    "module": "esnext",
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "sourceMap": true,
     "strict": true,
-    "target": "es5",
+    "types": ["node"],
+    "target": "esnext",
+    "moduleResolution": "node",
+    "suppressImplicitAnyIndexErrors": true,
     "newLine": "lf",
     "preserveConstEnums": true,
+    "outDir": "dist",
     "stripInternal": true
   },
   "include": ["src/*.ts"]

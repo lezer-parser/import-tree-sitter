@@ -1,7 +1,19 @@
 {
   "name": "lezer-import-tree-sitter",
+  "type": "module",
+  "bin": {
+    "lezer-import-tree-sitter": "dist/import-cli.js"
+  },
+  "scripts": {
+    "prepare": "tsc",
+    "build": "tsc"
+  },
   "dependencies": {
-    "regexp-parser-literal": "^1.1.14",
-    "regexpp2": "^1.3.9"
+    "regexp-parser-literal": "^1.1.35",
+    "regexpp2": "^1.3.27"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.14",
+    "typescript": "^4.9.4"
   }
 }
