@@ -2,9 +2,24 @@
 
 Utility to help convert grammars written for [tree-sitter](https://tree-sitter.github.io/) to Lezer's grammar notation.
 
+## Status
+
 This isn't a polished easy-to-use tool, but might help save time when porting a grammar.
 
+## Usage
+
+### CLI
+
+```sh
+npm install -g https://github.com/lezer-parser/import-tree-sitter
+lezer-import-tree-sitter src/grammar.json >some_language.grammar
+```
+
+### API
+
 If you pass the tree-sitter grammar JSON representation (usually in `src/grammar.json`), as a string, to the `buildGrammar` function defined in `src/import.ts`, it'll spit out an equivalent Lezer grammar file.
+
+## Limitations
 
 Because tree-sitter's concepts don't all map to Lezer concepts, you'll only get a working, finished grammar for very trivial grammars. Specifically:
 
