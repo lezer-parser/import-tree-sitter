@@ -223,13 +223,32 @@ class Context {
     }
   }
 
+  translateTokenToRegExpr(token: TokenExpr) {
+    const handlers: Record<string, (token: any) => string> = {}
+    const handle = (token: any): string => {
+      if (!(token.type in handlers)) {
+        throw new Error("not implemented: token.type = " + token.type)
+      }
+      return handlers[token.type](token)
+    }
+    handlers.SEQ = (token: SeqExpr) => token.members.map(child => handle(child)).join("")
+    handlers.CHOICE = (token: ChoiceExpr) => "(?:" + token.members.map(child => handle(child)).join("|") + ")"
+    handlers.REPEAT = (token: RepeatExpr) => "(?:" + handle(token.content) + ")*"
+    handlers.PATTERN = (token: PatternExpr) => token.value
+    function escapeRegExp(s: string) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    handlers.STRING = (token: StringExpr) => escapeRegExp(token.value)
+    return handle(token.content)
+  }
+
   build() {
     if (this.def.word) {
       let expr = this.def.rules[this.def.word], pattern = ""
       for (let part of expr.type == "SEQ" ? expr.members : [expr]) {
         if (part.type == "STRING") pattern += part.value.replace(/[^\w\s]/g, "\\$&")
         else if (part.type == "PATTERN") pattern += part.value
-        else if (part.type == "TOKEN") pattern += this.translateExpr(part.content, true)
+        else if (part.type == "TOKEN") pattern += this.translateTokenToRegExpr(part)
         else throw new RangeError("Word token too complex")
       }
       this.wordRuleName = this.def.rules["_kw"] ? this.generateName("kw") : "kw"
