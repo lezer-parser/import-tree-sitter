@@ -252,7 +252,7 @@ class Context {
         else throw new RangeError("Word token too complex")
       }
       this.wordRuleName = this.def.rules["_kw"] ? this.generateName("kw") : "kw"
-      this.wordRule = `${this.wordRuleName}<term> { @specialize[name={term}]<${this.translateName(this.def.word)}, term> }\n\n`
+      this.wordRule = `${this.wordRuleName}<term> { @specialize[@name={term}]<${this.translateName(this.def.word)}, term> }\n\n`
       this.wordRE = new RegExp("^(" + pattern + ")$")
     }
 
