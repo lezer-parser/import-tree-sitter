@@ -6,6 +6,7 @@
   },
   "scripts": {
     "prepare": "tsc",
+    "watch": "tsc --watch",
     "build": "tsc"
   },
   "dependencies": {
