@@ -229,6 +229,7 @@ class Context {
       for (let part of expr.type == "SEQ" ? expr.members : [expr]) {
         if (part.type == "STRING") pattern += part.value.replace(/[^\w\s]/g, "\\$&")
         else if (part.type == "PATTERN") pattern += part.value
+        else if (part.type == "TOKEN") pattern += this.translateExpr(part.content, true)
         else throw new RangeError("Word token too complex")
       }
       this.wordRuleName = this.def.rules["_kw"] ? this.generateName("kw") : "kw"
