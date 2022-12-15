@@ -223,34 +223,9 @@ class Context {
     }
   }
 
-  translateTokenToRegExpr(token: TokenExpr) {
-    const handlers: Record<string, (token: any) => string> = {}
-    const handle = (token: any): string => {
-      if (!(token.type in handlers)) {
-        throw new Error("not implemented: token.type = " + token.type)
-      }
-      return handlers[token.type](token)
-    }
-    handlers.SEQ = (token: SeqExpr) => token.members.map(child => handle(child)).join("")
-    handlers.CHOICE = (token: ChoiceExpr) => "(?:" + token.members.map(child => handle(child)).join("|") + ")"
-    handlers.REPEAT = (token: RepeatExpr) => "(?:" + handle(token.content) + ")*"
-    handlers.PATTERN = (token: PatternExpr) => token.value
-    function escapeRegExp(s: string) {
-      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-    handlers.STRING = (token: StringExpr) => escapeRegExp(token.value)
-    return handle(token.content)
-  }
-
   build() {
     if (this.def.word) {
-      let expr = this.def.rules[this.def.word], pattern = ""
-      for (let part of expr.type == "SEQ" ? expr.members : [expr]) {
-        if (part.type == "STRING") pattern += part.value.replace(/[^\w\s]/g, "\\$&")
-        else if (part.type == "PATTERN") pattern += part.value
-        else if (part.type == "TOKEN") pattern += this.translateTokenToRegExpr(part)
-        else throw new RangeError("Word token too complex")
-      }
+      let expr = this.def.rules[this.def.word], pattern = toRegExp(expr)
       this.wordRuleName = this.def.rules["_kw"] ? this.generateName("kw") : "kw"
       this.wordRule = `${this.wordRuleName}<term> { @specialize[@name={term}]<${this.translateName(this.def.word)}, term> }\n\n`
       this.wordRE = new RegExp("^(" + pattern + ")$")
@@ -282,6 +257,25 @@ class Context {
     let tokenStr = `@tokens {\n${tokens.map(t => `  ${t} ${this.tokens[t]}\n`).join("")}}`
     let skipStr = `@skip { ${this.skip} }\n\n`
     return ruleStr + this.wordRule + skipStr + externalStr + tokenStr
+  }
+}
+
+function toRegExp(token: TSExpr): string {
+  switch (token.type) {
+    case "SEQ":
+      return token.members.map(child => toRegExp(child)).join("")
+    case "CHOICE":
+      return `(?:${token.members.map(child => toRegExp(child)).join("|")})`
+    case "REPEAT":
+      return `(?:${toRegExp(token.content)})*`
+    case "REPEAT1":
+      return `(?:${toRegExp(token.content)})+`
+    case "PATTERN":
+      return token.value
+    case "STRING":
+      return token.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    default:
+      throw new Error("not implemented: token.type = " + token.type)
   }
 }
 
