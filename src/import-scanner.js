@@ -125,11 +125,14 @@ function getTokenName(name) {
   // note: usually scanner.cc and grammar.js use the same names for external tokens,
   // but the names *can* be different.
   // but the names *must* have the same order in both files.
+  //console.error("getTokenName: name", JSON.stringify(name))
   name = externalOfTokenType[name]
+  // edge case: name = "_simple_heredoc_body" -> filter(Boolean)
   // convert to PascalCase
-  return name.split("_").map(part => (
-    part[0].toUpperCase() + part.slice(1).toLowerCase()
-  )).join("")
+  return name.split("_").filter(Boolean).map(part => {
+    //console.error("getTokenName: name part", JSON.stringify(part))
+    return part[0].toUpperCase() + part.slice(1).toLowerCase()
+  }).join("")
 }
 
 const parser = lezerCpp.configure({
@@ -149,100 +152,13 @@ const transpileOfNodeType = {
     const text = nodeText(node, state)
     return commentLines(text, "preproc")
   },
-  /*
-  DeclarationList(node) {
-    node = firstChild(node)
-    node = nextSibling(node) // skip first child "{"
-    let result = ""
-    while (node) {
-      result += node.type.transpile(node, state)
-      node = nextSibling(node)
-    }
-    return result
-  },
-  EnumSpecifier(node) {
-    let result = ""
-    node = firstChild(node)
-    // enum
-    //printNode(node, state, "enum")
-    node = nextSibling(node)
-    // TypeIdentifier
-    //printNode(node, state, "TypeIdentifier")
-    const name = nodeText(node, state)
-    //console.dir({name})
-    node = nextSibling(node)
-    // EnumeratorList
-    //printNode(node, state, "EnumeratorList")
-    node = firstChild(node)
-    let i = 0
-    while (node) {
-      if (node.type.name == "Enumerator") {
-        // Enumerator
-        //printNode(node, state, "Enumerator " + i)
-        result += `/// @enum ${name}.${nodeText(node, state)}\n`
-        i++
-      }
-      node = nextSibling(node)
-    }
-    //exitNode(node, state)
-    return result
-  },
-  StructSpecifier(node) {
-    let result = ""
-    node = firstChild(node)
-    // struct
-    //printNode(node, state, "struct")
-    node = nextSibling(node)
-    // TypeIdentifier
-    //printNode(node, state, "TypeIdentifier")
-    const name = nodeText(node, state)
-    //console.dir({name})
-    result += `/// @class ${name} start\n`
-    node = nextSibling(node)
-    // FieldDeclarationList
-    //printNode(node, state, "FieldDeclarationList")
-    node = firstChild(node)
-    let i = 0
-    while (node) {
-      /*
-      if (node.type.name == "FunctionDefinition") {
-        printNode(node, state, "FunctionDefinition " + i)
-        result += `/// @fn ${name}.${nodeText(node, state)}\n`
-        i++
-      }
-      else
-      *xxxxxxxxx/
-      if (node.type.name == "FieldDeclaration") {
-        //printNode(node, state, "FunctionDefinition " + i)
-        //result += `/// @fn ${name}.${nodeText(node, state)}\n`
-        result += formatNode(node, state, `/// @fn ${node.type.name}`)
-        i++
-      }
-      else if (node.type.name == "{" || node.type.name == "}") {
-        // ignore
-      }
-      else {
-        result += formatNode(node, state, `/// @todo type ${node.type.name}`)
-      }
-      node = nextSibling(node)
-    }
-    //exitNode(node, state)
-    result += `/// @class ${name} end\n`
-    return result
-  },
-  */
   ExpressionStatement(node, state) {
     node = firstChild(node)
     return node.type.transpile(node, state) + ";\n"
   },
   UpdateExpression(node, state) {
     // example: i++
-    // TODO convertStringToArrayNames
-    //return unwrapNode(node, state) + ";\n"
-    return (
-      //todoNode(node, state) + "\n" +
-      unwrapNode(node, state) + ";\n"
-    )
+    return unwrapNode(node, state) + ";\n"
   },
   LineComment(node, state) {
     return nodeText(node, state) + "\n"
@@ -252,17 +168,8 @@ const transpileOfNodeType = {
     const text = nodeText(node, state)
     if (text == "lexer->lookahead") {
       //return "input.next"
-      /*
-      // verbose
-      return (
-        "// https://github.com/microsoft/TypeScript/issues/9998\n" +
-        "// @ts-ignore condition will always return 'true'\n" +
-        "input.next"
-      )
-      */
       // workaround for https://github.com/microsoft/TypeScript/issues/9998
       return "inputNext()"
-      
     }
     node = firstChild(node) // object
     const name = nodeText(node, state)
@@ -298,12 +205,6 @@ const transpileOfNodeType = {
     let name = nodeText(node, state)
     if (node.type.name == "FieldExpression") {
       // based on FieldExpression(node, state)
-      /*
-      let node = firstChild(node)
-      const object = nodeText(node, state)
-      node = nextSibling(node)
-      let keys = [nodeText(node, state)]
-      */
       let node = firstChild(nameNode) // object
       const name = nodeText(node, state)
       node = nextSibling(node) // key1
@@ -313,14 +214,6 @@ const transpileOfNodeType = {
         keys.push(nodeText(node, state))
         node = nextSibling(node)
       }
-      /*
-      // debug
-      if (
-        keys[0] != "advance"
-      ) {
-        throw new Error("TODO CallExpression to FieldExpression: " + text + " " + JSON.stringify(keys) + " " + keys.slice(-1)[0])
-      }
-      */
       if (keys.slice(-1)[0] == "size") {
         // x.size() -> x.length
         // translate keys
@@ -721,11 +614,25 @@ const scannerCppSource = readFileSync(process.argv[2], "utf8")
 
 const grammarJsonSource = readFileSync(process.argv[3], "utf8")
 const grammar = JSON.parse(grammarJsonSource)
-const externalNames = grammar.externals.map(ext => {
-  if (ext.type != "SYMBOL") {
-    throw new Error("not implemented: external type " + ext.type)
+const externalNames = grammar.externals.map(external => {
+  if (external.type == "SYMBOL") {
+    return external.name
   }
-  return ext.name
+  if (external.type == "STRING") {
+    const name = external.value.split("").map(c => asciiNames[c.charCodeAt(0)]).join("_")
+    //console.error(`external string: ${JSON.stringify(external.value)} -> ${name}`)
+    /*
+      examples:
+      external string: "}" -> curlyClose
+      external string: "]" -> bracketClose
+      external string: "<<" -> angleOpen_angleOpen
+      external string: "<<-" -> angleOpen_angleOpen_minus
+      external string: "\n" -> LF
+    */
+    return name
+  }
+  console.error({external})
+  throw new Error("not implemented: external type " + external.type)
 })
 
 var tree = parser.parse(scannerCppSource)
@@ -822,6 +729,48 @@ const scanFuncNode = findNode(scannerStructNode, (node) => {
 
 
 
+  // get name of second argument, usually "valid_symbols"
+let validSymbolsName = ""
+{
+  let node = scanFuncNode
+  node = firstChild(node)
+  // return type
+  node = nextSibling(node) // FunctionDeclarator: "scan(TSLexer *lexer, const bool *valid_symbols)"
+  // function head
+  node = firstChild(node) // FieldIdentifier: "scan"
+  node = nextSibling(node) // ParameterList: "(TSLexer *lexer, const bool *valid_symbols)"
+  //console.error(formatNode(node, state, "paramList"))
+  node = firstChild(node) // (: "("
+  node = nextSibling(node) // ParameterDeclaration: "TSLexer *lexer"
+  // parameter 1
+  //console.error(formatNode(node, state, "param1"))
+  node = nextSibling(node) // ","
+  node = nextSibling(node) // ParameterDeclaration: "const bool *valid_symbols"
+  // parameter 2
+  //console.error(formatNode(node, state, "param2"))
+  const paramNode = node
+  node = firstChild(node) // (: "("
+  // seek to last child
+  let nextNode = nextSibling(node)
+  while (nextNode) {
+    node = nextNode
+    nextNode = nextSibling(nextNode)
+  }
+  // node: PointerDeclarator: "*valid_symbols"
+  if (node.type.name == "PointerDeclarator") {
+    node = firstChild(node) // Identifier: "valid_symbols"
+    validSymbolsName = nodeText(node, state)
+  }
+  else {
+    console.error(`not implemented: param node type ${node.type.name}`)
+    console.error(formatNode(paramNode, state, "param"))
+    process.exit(1)
+  }
+}
+//console.error(`validSymbolsName: ${validSymbolsName}`)
+
+
+
 // codegen
 
 let result = ""
@@ -872,6 +821,38 @@ else {
     //result += `export const ${getTokenName(name)} = new ExternalTokenizer(/** @type {ETF} */ (input) => {\n`
     result += `export const ${getTokenName(name)} = new ExternalTokenizer((input) => {\n`
     // TODO find conditional block or codepath
+
+    // TODO patch conditions
+    // valid_symbols[${name}] -> true
+    // valid_symbols[*] -> false
+    // then, remove dead code (tree shaking)
+
+    let node = scanFuncNode
+    node = firstChild(node)
+    // return type
+    node = nextSibling(node)
+    // function head
+    node = nextSibling(node)
+    // function body
+    //result += formatNode(node, state, "/// @fn scan body")
+    if (node.type.name == "CompoundStatement") {
+      // code block -> unwrap
+      node = firstChild(node) // "{"
+      node = nextSibling(node)
+      while (node) {
+        if (node.type.name != "}") {
+          result += node.type.transpile(node, state)
+        }
+        node = nextSibling(node)
+      }
+    }
+    else {
+      // TODO verify. not reachable?
+      result += node.type.transpile(node, state)
+    }
+    // this causes double curly braces: { { ... } }
+    //result += node.type.transpile(node, state)
+
     result += `})\n`
   }
 }
@@ -946,13 +927,20 @@ const fileHeader = [
   `// @ts-ignore Cannot find module - file is generated`,
   `import * as ${tokensObjectName} from "./parser.terms.js"`,
   ``,
-  `// ascii chars`,
   (
-    "const " +
-    Array.from(usedAsciiCodes.values()).sort().map(code => `${asciiNames[code]} = ${code}`).join(", ") +
-    ";"
+    usedAsciiCodes.size > 0
+    ? [
+      `// ascii chars`,
+      (
+        "const " +
+        Array.from(usedAsciiCodes.values()).sort().map(code => `${asciiNames[code]} = ${code}`).join(", ") +
+        ";"
+      ),
+      ``,
+    ]
+    : ""
   ),
-  ``,
+
   /*
   `const spaceCodes = [`,
   `  9, 10, 11, 12, 13, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200,`,
