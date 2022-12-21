@@ -260,24 +260,24 @@ class Context {
   }
 }
 
-function toRegExp(token: TSExpr): string {
-  switch (token.type) {
+function toRegExp(expr: TSExpr): string {
+  switch (expr.type) {
     case "TOKEN":
-      return toRegExp(token.content)
+      return toRegExp(expr.content)
     case "SEQ":
-      return token.members.map(child => toRegExp(child)).join("")
+      return expr.members.map(child => toRegExp(child)).join("")
     case "CHOICE":
-      return `(?:${token.members.map(child => toRegExp(child)).join("|")})`
+      return `(?:${expr.members.map(child => toRegExp(child)).join("|")})`
     case "REPEAT":
-      return `(?:${toRegExp(token.content)})*`
+      return `(?:${toRegExp(expr.content)})*`
     case "REPEAT1":
-      return `(?:${toRegExp(token.content)})+`
+      return `(?:${toRegExp(expr.content)})+`
     case "PATTERN":
-      return token.value
+      return expr.value
     case "STRING":
-      return token.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      return expr.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     default:
-      throw new Error("not implemented: token.type = " + token.type)
+      throw new Error("not implemented: expr.type = " + expr.type)
   }
 }
 
