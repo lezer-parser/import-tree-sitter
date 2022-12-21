@@ -262,6 +262,8 @@ class Context {
 
 function toRegExp(token: TSExpr): string {
   switch (token.type) {
+    case "TOKEN":
+      return toRegExp(token.content)
     case "SEQ":
       return token.members.map(child => toRegExp(child)).join("")
     case "CHOICE":
