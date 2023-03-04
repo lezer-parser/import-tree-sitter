@@ -67,6 +67,9 @@ function takePrec(expr: TSExpr) {
 class Context {
   rules: {[name: string]: string} = Object.create(null)
   tokens: {[name: string]: string} = Object.create(null)
+  tokenNewNames: {[name: string]: string} = Object.create(null)
+  ruleNewNames: {[name: string]: string} = Object.create(null)
+  hiddenSymbols: {[name: string]: string} = Object.create(null)
   skip: string = ""
 
   wordRE: RegExp | null = null
@@ -96,8 +99,17 @@ class Context {
         let opt = isOption(expr)
         return opt ? this.translateInner(opt, token, 10) + "?"
           : expr.members.map(e => this.translateInner(e, token, prec(expr))).join(" | ")
-      case "ALIAS": // FIXME this should override/drop the name of the inner expr, somehow
-        if (token) throw new RangeError("Alias expression in token")
+      case "ALIAS":
+        if (expr.content.type == "SYMBOL" && expr.content.name[0] != "_") {
+          // override the name of the inner symbol
+          let hiddenName = this.hiddenSymbols[expr.content.name]
+          if (!hiddenName) {
+            hiddenName = this.generateName("_" + expr.content.name)
+            this.hiddenSymbols[expr.content.name] = hiddenName
+          }
+          //console.error(`this.hiddenSymbols[${expr.content.name}]:`, this.hiddenSymbols[expr.content.name])
+          expr.content.name = hiddenName
+        }
         if (expr.named && (expr.content.type == "TOKEN" || expr.content.type == "IMMEDIATE_TOKEN"))
           return this.defineToken(expr.value, expr.content.content)
         let inner = this.translateExpr(expr.content, token)
@@ -133,14 +145,17 @@ class Context {
 
   translateRule(name: string, content: TSExpr, top: boolean) {
     if (!top && content.type == "TOKEN") {
-      this.defineToken(name, content.content)
+      const key = this.defineToken(name, content.content)
+      this.tokenNewNames[name] = key
     } else if (!top && this.isTokenish(content)) {
-      this.defineToken(name, content)
+      const key = this.defineToken(name, content)
+      this.tokenNewNames[name] = key
     } else {
       let {comment, expr} = takePrec(content)
       let result = choices(expr).map(choice => this.translateExpr(choice, false))
-      this.rules[(top ? "@top " : "") + this.translateName(name)] =
-        `${comment}{\n  ${result.join(" |\n  ")}\n}`
+      const key = (top ? "@top " : "") + this.translateName(name)
+      this.rules[key] = `${comment}{\n  ${result.join(" |\n  ")}\n}`
+      this.ruleNewNames[name] = key
     }
   }
 
@@ -242,6 +257,27 @@ class Context {
     for (let name in this.def.rules) {
       this.translateRule(name, this.def.rules[name], first)
       first = false
+    }
+
+    // hide symbols for alias rules
+    for (const [publicNameOld, hiddenNameOld] of Object.entries(this.hiddenSymbols)) {
+      //let symbolType = "rule"
+      let symbolScope = this.rules
+      let symbolNameMap = this.ruleNewNames
+      if (!(publicNameOld in this.ruleNewNames)) {
+        //symbolType = "token"
+        symbolScope = this.tokens
+        symbolNameMap = this.tokenNewNames
+      }
+      const publicName = symbolNameMap[publicNameOld]
+      //const hiddenName = symbolNameMap[hiddenNameOld] // undefined
+      const hiddenName = this.translateName(hiddenNameOld)
+      if (!(publicName in symbolScope)) {
+        continue
+      }
+      //console.error(`hiding ${symbolType} ${publicName} to ${hiddenName}`)
+      symbolScope[hiddenName] = symbolScope[publicName]
+      symbolScope[publicName] = `{ ${hiddenName} }`
     }
   }
 
