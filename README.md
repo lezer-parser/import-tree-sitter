@@ -1,3 +1,5 @@
+**This repository has moved to https://code.haverbeke.berlin/lezer/import-tree-sitter**
+
 # import-tree-sitter
 
 Utility to help convert grammars written for [tree-sitter](https://tree-sitter.github.io/) to Lezer's grammar notation.

@@ -187,7 +187,7 @@ class Context {
               else if (r.kind == "word") return "a-zA-Z0-9_"
               else throw new Error("Unhandled range type: EscapeCharacterSet/property")
             case "Character":
-              return r.raw
+              return String.fromCodePoint((r as any).value)
             case "CharacterClassRange":
               return r.min.raw + "-" + r.max.raw
             default:
@@ -201,7 +201,7 @@ class Context {
         else if (elt.kind == "word") return `${elt.negate ? "!" : "$"}[a-zA-Z0-9_]`
         else throw new Error("Unhandled range type: EscapeCharacterSet/property")
       case "Character":
-        return JSON.stringify(elt.raw)
+        return JSON.stringify(String.fromCodePoint((elt as any).value))
       default:
         throw new RangeError("Unhandled regexp element type: " + elt.type)
     }
